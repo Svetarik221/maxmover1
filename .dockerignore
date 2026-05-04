@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+media_cache/
+sessions/
+*.session
+*.session-journal
+.env
+.env.*
+_local_before_resync/
+_server_snapshot/
+*.bak
+*.bak.*

@@ -1,0 +1,11 @@
+[Unit]
+Description=MaxMover DB backup daily at 03:00 UTC
+Requires=maxmover-backup.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

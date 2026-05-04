@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Комментарии</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #fff;
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: center;
+            font-size: 17px;
+            font-weight: 600;
+        }
+        .comments-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+        }
+        .comment {
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .comment-name { font-weight: 600; font-size: 14px; color: #2196F3; }
+        .comment-time { font-size: 12px; color: #999; }
+        .comment-text { font-size: 15px; line-height: 1.4; word-wrap: break-word; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #999; font-size: 15px; }
+        .input-area {
+            background: #fff;
+            border-top: 1px solid #e0e0e0;
+            padding: 10px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .input-area textarea {
+            flex: 1; border: 1px solid #ddd; border-radius: 20px;
+            padding: 10px 16px; font-size: 15px; font-family: inherit;
+            resize: none; max-height: 120px; outline: none; line-height: 1.3;
+        }
+        .input-area textarea:focus { border-color: #2196F3; }
+        .send-btn {
+            width: 40px; height: 40px; border: none; background: #2196F3;
+            color: #fff; border-radius: 50%; font-size: 18px; cursor: pointer;
+            flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+        }
+        .send-btn:disabled { background: #ccc; }
+        .error-msg {
+            text-align: center; padding: 12px; background: #ffebee; color: #c62828;
+            font-size: 14px; border-radius: 8px; margin: 8px 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">💬 Комментарии</div>
+    <div class="comments-list" id="comments">
+        <div class="empty-state">Загрузка...</div>
+    </div>
+    <div class="input-area">
+        <textarea id="input" rows="1" placeholder="Написать комментарий..." oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendComment()" disabled>&#9654;</button>
+    </div>
+
+    <script src="https://st.max.ru/js/max-web-app.js"></script>
+    <script>
+        // ВАЖНО: замените на адрес вашего сервера (там где работает max_webhook)
+        // Пример: 'https://yourbot.example.com/api/comments'
+        const API_BASE = window.MAXMOVER_API_BASE || '/api/comments';
+        let postId = '';
+        let chatId = '';
+        let userId = 0;
+        let userName = '';
+
+        function parsePayload(raw) {
+            if (!raw) return;
+            const parts = raw.split('__');
+            if (parts.length >= 1) {
+                const idx = parts[0].indexOf('-');
+                if (idx > 0) {
+                    postId = parts[0].substring(0, idx) + '.' + parts[0].substring(idx + 1);
+                } else {
+                    postId = parts[0];
+                }
+            }
+            if (parts.length >= 2) {
+                chatId = parts[1].replace(/^n/, '-');
+            }
+        }
+
+        function init() {
+            const params = new URLSearchParams(window.location.search);
+
+            // Payload из URL (MAX передаёт через WebAppStartParam)
+            const startParam = params.get('WebAppStartParam') || '';
+            if (startParam) parsePayload(startParam);
+
+            // Данные пользователя из MAX Bridge
+            if (window.WebApp) {
+                try {
+                    const sources = [
+                        WebApp.user,
+                        WebApp.initDataUnsafe && WebApp.initDataUnsafe.user,
+                    ];
+                    for (const u of sources) {
+                        if (u && (u.id || u.user_id || u.first_name || u.name)) {
+                            userId = u.user_id || u.id || 0;
+                            userName = u.first_name || u.name || '';
+                            break;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            if (!userName) userName = 'Аноним';
+            if (!userId) {
+                userId = parseInt(localStorage.getItem('anon_uid') || '0');
+                if (!userId) {
+                    userId = Math.floor(Math.random() * 900000000) + 100000000;
+                    localStorage.setItem('anon_uid', String(userId));
+                }
+            }
+
+            if (!postId) {
+                document.getElementById('comments').innerHTML =
+                    '<div class="error-msg">Пост не найден</div>';
+                return;
+            }
+
+            loadComments();
+            setInterval(loadComments, 10000);
+        }
+
+        async function loadComments() {
+            const container = document.getElementById('comments');
+            try {
+                const resp = await fetch(`${API_BASE}?post_id=${encodeURIComponent(postId)}`);
+                const data = await resp.json();
+                if (!data.comments || data.comments.length === 0) {
+                    container.innerHTML = '<div class="empty-state">Пока нет комментариев.<br>Будьте первым!</div>';
+                    return;
+                }
+                const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+                container.innerHTML = data.comments.map(c => `
+                    <div class="comment">
+                        <div class="comment-header">
+                            <span class="comment-name">${escapeHtml(c.user_name)}</span>
+                            <span class="comment-time">${formatTime(c.created_at)}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(c.text)}</div>
+                    </div>
+                `).join('');
+                if (wasAtBottom) container.scrollTop = container.scrollHeight;
+            } catch (e) {}
+        }
+
+        async function sendComment() {
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+            if (!text || !postId) return;
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            try {
+                const resp = await fetch(API_BASE, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        post_id: postId, chat_id: chatId,
+                        user_id: userId, user_name: userName, text: text,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    input.value = '';
+                    input.style.height = 'auto';
+                    await loadComments();
+                    document.getElementById('comments').scrollTop =
+                        document.getElementById('comments').scrollHeight;
+                } else { alert(data.error || 'Ошибка'); }
+            } catch (e) { alert('Ошибка сети'); }
+            btn.disabled = false;
+        }
+
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+            document.getElementById('sendBtn').disabled = !el.value.trim();
+        }
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+        function formatTime(iso) {
+            const d = new Date(iso + 'Z'), now = new Date(), pad = n => String(n).padStart(2, '0');
+            const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            return d.toDateString() === now.toDateString() ? time : `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${time}`;
+        }
+        document.getElementById('input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendComment(); }
+        });
+        init();
+    </script>
+</body>
+</html>

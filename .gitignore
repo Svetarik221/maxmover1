@@ -1,0 +1,30 @@
+# --- Секреты ---
+.env
+.env.*
+!.env.example
+
+# --- Telethon ---
+*.session
+*.session-journal
+sessions/
+
+# --- БД и кэш ---
+backups/
+media_cache/
+*.bak
+*.bak.*
+celerybeat-schedule*
+
+# --- Dedup state DE worker ---
+de-worker/processed_jobs.json
+de-worker/processed_posts.json
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- IDE ---
+.idea/
+.vscode/
+.DS_Store

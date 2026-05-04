@@ -1,0 +1,9 @@
+[Unit]
+Description=MaxMover DB backup
+Wants=maxmover-backup.timer
+
+[Service]
+Type=oneshot
+ExecStart=/opt/maxmover/scripts/backup_db.sh
+StandardOutput=journal
+StandardError=journal
