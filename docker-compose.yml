@@ -49,6 +49,26 @@ services:
       - redis
     restart: unless-stopped
 
+  # DE-воркер: Telethon-сервис для переноса постов и обработки больших видео.
+  # Telethon работает напрямую с TG (MTProto), поэтому не имеет лимита 20МБ.
+  # Запускается на том же сервере что и бот (в open mode) или на отдельном
+  # VPS вне РФ (тогда вынесите этот сервис в отдельный docker-compose).
+  de_worker:
+    build: .
+    command: python -u de-worker/transfer_worker.py
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      # processed_jobs.json/processed_posts.json кладутся сюда — между рестартами не теряются
+      - DEDUP_STATE_DIR=/app/de-worker
+      - TELETHON_SESSION_PATH=/app/sessions/bot_session
+      - TELETHON_MEDIA_DIR=/app/media_cache
+    volumes:
+      - ./sessions:/app/sessions
+      - ./media_cache:/app/media_cache
+      - ./de-worker:/app/de-worker
+    restart: unless-stopped
+
   db:
     image: postgres:16
     environment:
